@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist_Mono } from "next/font/google";
 import localFont from "next/font/local";
 
+import { DoorTransition } from "@/components/layout/door-transition";
 import { ScrollBrand } from "@/components/layout/scroll-brand";
 import { siteConfig } from "@/lib/constants";
 
@@ -42,8 +43,10 @@ export default function RootLayout({
       className={`${orangeAvenue.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-background font-sans text-foreground">
-        <ScrollBrand className={oldSchoolUnited.className} />
-        <main className="flex flex-1 flex-col">{children}</main>
+        <DoorTransition>
+          <ScrollBrand className={oldSchoolUnited.className} />
+          <main className="flex flex-1 flex-col">{children}</main>
+        </DoorTransition>
       </body>
     </html>
   );
