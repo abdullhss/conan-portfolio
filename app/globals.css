@@ -1,26 +1,51 @@
 @import "tailwindcss";
 
+/*
+  Palette:
+  Dark blue #1E3A8A · Light #2563EB · Dark shade #1E2A78 · White #FFFFFF · Bow tie #C81E1E
+*/
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #1e2a78;
+  --muted-foreground: color-mix(in srgb, #1e3a8a 58%, #ffffff);
+  --border: color-mix(in srgb, #1e3a8a 14%, transparent);
+  --card: #ffffff;
+  --accent: #2563eb;
+  --brand: #1e3a8a;
+  --brand-dark: #1e2a78;
+  --bow-tie: #c81e1e;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #1e2a78;
+    --foreground: #ffffff;
+    --muted-foreground: color-mix(in srgb, #ffffff 74%, #2563eb);
+    --border: color-mix(in srgb, #ffffff 16%, transparent);
+    --card: #1e3a8a;
+    --accent: #2563eb;
+    --brand: #2563eb;
+    --brand-dark: #1e2a78;
+    --bow-tie: #c81e1e;
+  }
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-card: var(--card);
+  --color-accent: var(--accent);
+  --color-brand: var(--brand);
+  --color-brand-dark: var(--brand-dark);
+  --color-bow-tie: var(--bow-tie);
+  --font-sans: var(--font-orange-avenue);
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), system-ui, sans-serif;
 }
