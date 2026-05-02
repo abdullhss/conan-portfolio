@@ -1,116 +1,298 @@
 "use client";
 
 import type { CSSProperties } from "react";
-import { useLayoutEffect, useRef } from "react";
+import { useId, useLayoutEffect, useRef } from "react";
 import gsap from "gsap";
 import Image from "next/image";
 import overlayImg from "@/assets/abdullah overlay.png";
 import hiddenImg from "@/assets/abdullah hidden (window).png";
 
+const MAX_TILT_DEG = 9;
+const Z_BACK = -42;
+const Z_FRONT = 52;
+
+/** Base scale for the lens; larger = wider/taller polygon overall. */
+function lensRadiusPx(rootW: number, rootH: number): number {
+  const vmin = Math.min(rootW, rootH) / 100;
+  return Math.min(56 * vmin, 15.5 * 16);
+}
+
+/** Extra horizontal spread (1 = uniform; values above 1 stretch width). */
+const LENS_WIDTH_STRETCH = 1.22;
+
+/** Deterministic PRNG for stable SSR + hydration (same “random” shape every build). */
+function mulberry32(seed: number) {
+  return function () {
+    let t = (seed += 0x6d2b79f5);
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+type LensVertexSpec = { angle: number; rMul: number };
+
+/** Irregular polygon: jittered angles + random radius multipliers, sorted by angle (simple polygon). */
+function buildIrregularLensSpec(seed: number, sides: number): LensVertexSpec[] {
+  const rnd = mulberry32(seed);
+  const raw: LensVertexSpec[] = [];
+  for (let i = 0; i < sides; i++) {
+    const baseAngle = (2 * Math.PI * i) / sides;
+    const angleJitter = (rnd() - 0.5) * 0.55;
+    raw.push({
+      angle: baseAngle + angleJitter,
+      rMul: 0.58 + rnd() * 0.42,
+    });
+  }
+  raw.sort((a, b) => a.angle - b.angle);
+  return raw;
+}
+
+/** Change seed to reshuffle the silhouette; keep fixed so SSR matches client. */
+const IRREGULAR_POLYGON_SEED = 0xdea110c;
+
+const IRREGULAR_LENS_SPEC = buildIrregularLensSpec(IRREGULAR_POLYGON_SEED, 300);
+
+function irregularPolygonPoints(cx: number, cy: number, baseR: number): string {
+  return IRREGULAR_LENS_SPEC.map(({ angle, rMul }) => {
+    const R = baseR * rMul;
+    const x = cx + R * Math.cos(angle) * LENS_WIDTH_STRETCH;
+    const y = cy + R * Math.sin(angle);
+    return `${x},${y}`;
+  }).join(" ");
+}
+
 export function HeroSection() {
-  const lensRootRef = useRef<HTMLDivElement>(null);
+  const maskId = useId().replace(/:/g, "");
+
+  const rootRef = useRef<HTMLDivElement>(null);
+  const sceneRef = useRef<HTMLDivElement>(null);
+  const maskElRef = useRef<SVGMaskElement>(null);
+  const maskRectRef = useRef<SVGRectElement>(null);
+  const holePolyRef = useRef<SVGPolygonElement>(null);
+  const rimPolyRef = useRef<SVGPolygonElement>(null);
+
   const posRef = useRef({ x: 0, y: 0 });
+  const tiltRef = useRef({ rx: 0, ry: 0 });
 
   useLayoutEffect(() => {
-    const root = lensRootRef.current;
-    if (!root) return;
+    const root = rootRef.current;
+    const scene = sceneRef.current;
+    if (!root || !scene) return;
 
     const reduced =
       typeof window !== "undefined" &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-    const duration = reduced ? 0 : 0.55;
-    const pos = posRef.current;
+    const lensDur = reduced ? 0 : 0.55;
+    const tiltDur = reduced ? 0 : 0.38;
 
-    const syncCss = () => {
-      root.style.setProperty("--mx", `${pos.x}px`);
-      root.style.setProperty("--my", `${pos.y}px`);
+    const pos = posRef.current;
+    const tilt = tiltRef.current;
+
+    const syncLensShapes = () => {
+      const w = root.clientWidth;
+      const h = root.clientHeight;
+      const R = lensRadiusPx(w, h);
+      const pts = irregularPolygonPoints(pos.x, pos.y, R);
+
+      maskElRef.current?.setAttribute("x", "0");
+      maskElRef.current?.setAttribute("y", "0");
+      maskElRef.current?.setAttribute("width", String(w));
+      maskElRef.current?.setAttribute("height", String(h));
+      maskRectRef.current?.setAttribute("x", "0");
+      maskRectRef.current?.setAttribute("y", "0");
+      maskRectRef.current?.setAttribute("width", String(w));
+      maskRectRef.current?.setAttribute("height", String(h));
+
+      holePolyRef.current?.setAttribute("points", pts);
+      rimPolyRef.current?.setAttribute("points", pts);
+    };
+
+    const applyTilt = () => {
+      scene.style.transform = `rotateX(${tilt.rx}deg) rotateY(${tilt.ry}deg)`;
     };
 
     const centerLens = () => {
       pos.x = root.clientWidth / 2;
       pos.y = root.clientHeight / 2;
-      syncCss();
+      syncLensShapes();
     };
 
     centerLens();
+    applyTilt();
 
     const xTo = gsap.quickTo(pos, "x", {
-      duration,
+      duration: lensDur,
       ease: "power3.out",
-      onUpdate: syncCss,
+      onUpdate: syncLensShapes,
     });
     const yTo = gsap.quickTo(pos, "y", {
-      duration,
+      duration: lensDur,
       ease: "power3.out",
-      onUpdate: syncCss,
+      onUpdate: syncLensShapes,
+    });
+
+    const rxTo = gsap.quickTo(tilt, "rx", {
+      duration: tiltDur,
+      ease: "power3.out",
+      onUpdate: applyTilt,
+    });
+    const ryTo = gsap.quickTo(tilt, "ry", {
+      duration: tiltDur,
+      ease: "power3.out",
+      onUpdate: applyTilt,
     });
 
     const onPointerMove = (event: PointerEvent) => {
-      if (reduced) return;
       const rect = root.getBoundingClientRect();
-      xTo(event.clientX - rect.left);
-      yTo(event.clientY - rect.top);
+
+      if (!reduced) {
+        xTo(event.clientX - rect.left);
+        yTo(event.clientY - rect.top);
+        const nx = (event.clientX - rect.left) / rect.width - 0.5;
+        const ny = (event.clientY - rect.top) / rect.height - 0.5;
+        rxTo(-ny * 2 * MAX_TILT_DEG);
+        ryTo(nx * 2 * MAX_TILT_DEG);
+      }
     };
+
+    const onPointerLeave = () => {
+      if (reduced) return;
+      rxTo(0);
+      ryTo(0);
+    };
+
+    const ro = new ResizeObserver(() => {
+      pos.x = root.clientWidth / 2;
+      pos.y = root.clientHeight / 2;
+      syncLensShapes();
+    });
+    ro.observe(root);
 
     root.addEventListener("pointermove", onPointerMove);
+    root.addEventListener("pointerleave", onPointerLeave);
 
     return () => {
+      ro.disconnect();
       root.removeEventListener("pointermove", onPointerMove);
+      root.removeEventListener("pointerleave", onPointerLeave);
     };
   }, []);
+
+  const fullMaskId = `lens-irregular-${maskId}`;
+  /** Matches ScrollBrand: bg-linear-to-b from-yellow-300 via-orange-400 to-red-600 */
+  const rimStrokeGradientId = `lens-rim-grad-${maskId}`;
 
   return (
     <section className="box-border flex h-screen min-h-screen w-full shrink-0 flex-col items-stretch self-stretch bg-black pt-6 sm:pt-10">
       <div
-        ref={lensRootRef}
+        ref={rootRef}
         className="relative min-h-0 flex-1 w-full max-w-none select-none overflow-hidden bg-black"
         style={
           {
             touchAction: "pan-y",
-            ["--lens-r"]: "min(32vmin, 9.5rem)",
+            perspective: "1400px",
           } as CSSProperties
         }
-        aria-label="Portrait with interactive magnifying lens — move the pointer to reveal the image underneath."
+        aria-label="Interactive 3D parallax portrait with irregular polygon lens — move the pointer to tilt the scene and reveal the layer below."
       >
-        <Image
-          src={hiddenImg}
-          alt=""
-          fill
-          priority
-          sizes="100vw"
-          className="pointer-events-none object-contain object-top select-none"
-          draggable={false}
-        />
-
-        <Image
-          src={overlayImg}
-          alt=""
-          fill
-          sizes="100vw"
-          className="pointer-events-none object-contain object-top select-none"
-          draggable={false}
-          style={{
-            WebkitMaskImage:
-              "radial-gradient(circle at var(--mx) var(--my), transparent var(--lens-r), black calc(var(--lens-r) + 1px))",
-            WebkitMaskRepeat: "no-repeat",
-            maskImage:
-              "radial-gradient(circle at var(--mx) var(--my), transparent var(--lens-r), black calc(var(--lens-r) + 1px))",
-            maskRepeat: "no-repeat",
-          }}
-        />
-
         <div
-          className="pointer-events-none absolute rounded-full border border-white/45 bg-linear-to-br from-white/12 to-transparent shadow-[inset_0_0_0_1px_rgba(255,255,255,0.25),0_12px_40px_rgba(0,0,0,0.2)]"
+          ref={sceneRef}
+          className="absolute inset-0 transform-3d will-change-transform"
           style={{
-            width: "calc(var(--lens-r) * 2)",
-            height: "calc(var(--lens-r) * 2)",
-            left: "var(--mx)",
-            top: "var(--my)",
-            transform: "translate(-50%, -50%)",
+            transformOrigin: "center center",
+            transform: "rotateX(0deg) rotateY(0deg)",
           }}
-          aria-hidden
-        />
+        >
+          <div
+            className="pointer-events-none absolute inset-0 transform-3d"
+            style={{
+              transform: `translateZ(${Z_BACK}px) scale(1.07)`,
+            }}
+          >
+            <Image
+              src={hiddenImg}
+              alt=""
+              fill
+              priority
+              sizes="100vw"
+              className="pointer-events-none object-contain object-top select-none"
+              draggable={false}
+            />
+          </div>
+
+          <div
+            className="pointer-events-none absolute inset-0 transform-3d"
+            style={{
+              transform: `translateZ(${Z_FRONT}px) scale(1.015)`,
+            }}
+          >
+            <Image
+              src={overlayImg}
+              alt=""
+              fill
+              sizes="100vw"
+              className="pointer-events-none object-contain object-top select-none"
+              draggable={false}
+              style={{
+                WebkitMaskImage: `url(#${fullMaskId})`,
+                WebkitMaskRepeat: "no-repeat",
+                maskImage: `url(#${fullMaskId})`,
+                maskRepeat: "no-repeat",
+              }}
+            />
+
+            <svg
+              className="pointer-events-none absolute inset-0 size-full"
+              aria-hidden
+            >
+              <defs>
+                <linearGradient
+                  id={rimStrokeGradientId}
+                  x1="0"
+                  y1="0"
+                  x2="0"
+                  y2="1"
+                  gradientUnits="objectBoundingBox"
+                >
+                  <stop offset="0%" stopColor="#fde047" stopOpacity={0.2} />
+                  <stop offset="50%" stopColor="#fb923c" stopOpacity={0.2} />
+                  <stop offset="100%" stopColor="#dc2626" stopOpacity={0.2} />
+                </linearGradient>
+                <mask
+                  ref={maskElRef}
+                  id={fullMaskId}
+                  maskUnits="userSpaceOnUse"
+                  maskContentUnits="userSpaceOnUse"
+                  x="0"
+                  y="0"
+                  width="1"
+                  height="1"
+                >
+                  <rect
+                    ref={maskRectRef}
+                    x="0"
+                    y="0"
+                    width="1"
+                    height="1"
+                    fill="white"
+                  />
+                  <polygon ref={holePolyRef} fill="black" />
+                </mask>
+              </defs>
+              <polygon
+                ref={rimPolyRef}
+                fill="none"
+                stroke={`url(#${rimStrokeGradientId})`}
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                vectorEffect="non-scaling-stroke"
+              />
+            </svg>
+          </div>
+        </div>
       </div>
     </section>
   );
