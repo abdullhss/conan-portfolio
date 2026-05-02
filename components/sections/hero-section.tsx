@@ -59,11 +59,38 @@ const IRREGULAR_POLYGON_SEED = 0xdea110c;
 
 const IRREGULAR_LENS_SPEC = buildIrregularLensSpec(IRREGULAR_POLYGON_SEED, 300);
 
+/** Static outline (reduced motion / fallback). */
 function irregularPolygonPoints(cx: number, cy: number, baseR: number): string {
   return IRREGULAR_LENS_SPEC.map(({ angle, rMul }) => {
     const R = baseR * rMul;
     const x = cx + R * Math.cos(angle) * LENS_WIDTH_STRETCH;
     const y = cy + R * Math.sin(angle);
+    return `${x},${y}`;
+  }).join(" ");
+}
+
+/** Same vertices as `buildIrregularLensSpec`, with gentle radial + angular motion over `timeSec`. */
+const LENS_BREATHE_AMP = 0.05;
+const LENS_BREATHE_HZ = 0.85;
+const LENS_ANGLE_WOBBLE_AMP = 0.035;
+
+function irregularPolygonPointsAnimated(
+  cx: number,
+  cy: number,
+  baseR: number,
+  timeSec: number,
+): string {
+  const omega = Math.PI * 2 * LENS_BREATHE_HZ;
+  return IRREGULAR_LENS_SPEC.map(({ angle, rMul }, i) => {
+    const phase = i * 0.37;
+    const breathe = 1 + LENS_BREATHE_AMP * Math.sin(omega * timeSec + phase);
+    const angleWobble =
+      LENS_ANGLE_WOBBLE_AMP *
+      Math.sin(timeSec * 1.15 + i * 0.09 + 2.1);
+    const a = angle + angleWobble;
+    const R = baseR * rMul * breathe;
+    const x = cx + R * Math.cos(a) * LENS_WIDTH_STRETCH;
+    const y = cy + R * Math.sin(a);
     return `${x},${y}`;
   }).join(" ");
 }
@@ -100,7 +127,10 @@ export function HeroSection() {
       const w = root.clientWidth;
       const h = root.clientHeight;
       const R = lensRadiusPx(w, h);
-      const pts = irregularPolygonPoints(pos.x, pos.y, R);
+      const t = performance.now() / 1000;
+      const pts = reduced
+        ? irregularPolygonPoints(pos.x, pos.y, R)
+        : irregularPolygonPointsAnimated(pos.x, pos.y, R, t);
 
       maskElRef.current?.setAttribute("x", "0");
       maskElRef.current?.setAttribute("y", "0");
@@ -179,7 +209,17 @@ export function HeroSection() {
     root.addEventListener("pointermove", onPointerMove);
     root.addEventListener("pointerleave", onPointerLeave);
 
+    const onLensTick = () => {
+      syncLensShapes();
+    };
+    if (!reduced) {
+      gsap.ticker.add(onLensTick);
+    }
+
     return () => {
+      if (!reduced) {
+        gsap.ticker.remove(onLensTick);
+      }
       ro.disconnect();
       root.removeEventListener("pointermove", onPointerMove);
       root.removeEventListener("pointerleave", onPointerLeave);
