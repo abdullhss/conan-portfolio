@@ -1,5 +1,10 @@
+const brandFirst = "Abdullah";
+const brandSecond = "Yosry";
+
 export const siteConfig = {
-  name: "Abdullah Yosry",
+  name: `${brandFirst} ${brandSecond}`,
+  brandFirst,
+  brandSecond,
   title: "Abdullah Yosry — Portfolio",
   description: "Portfolio and selected work.",
   nav: [] as const,
