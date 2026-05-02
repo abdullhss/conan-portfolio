@@ -191,8 +191,8 @@ export function HeroSection() {
   const rimStrokeGradientId = `lens-rim-grad-${maskId}`;
 
   return (
-    <section className="box-border flex h-screen min-h-screen w-full shrink-0 flex-col items-stretch self-stretch bg-black pt-6 sm:pt-10">
-      <div className="flex min-h-0 w-full flex-1 items-center justify-center gap-3 px-3 sm:px-4">
+    <section className="box-border flex h-screen min-h-screen w-full shrink-0 flex-col items-stretch self-stretch bg-black pb-0 pt-6 sm:pt-10">
+      <div className="flex min-h-0 w-full flex-1 items-end justify-center gap-3 px-3 pb-0 sm:px-4">
         {/* Optional: add columns before/after the portrait (e.g. <aside className="hidden w-40 shrink-0 lg:block" />) */}
         <div
           ref={rootRef}
@@ -229,7 +229,7 @@ export function HeroSection() {
               fill
               priority
               sizes="(max-width: 768px) 96vw, min(90vw, 1200px)"
-              className="pointer-events-none object-contain object-top select-none"
+              className="pointer-events-none object-contain object-bottom select-none"
               draggable={false}
             />
           </div>
@@ -245,7 +245,7 @@ export function HeroSection() {
               alt=""
               fill
               sizes="(max-width: 768px) 96vw, min(90vw, 1200px)"
-              className="pointer-events-none object-contain object-top select-none"
+              className="pointer-events-none object-contain object-bottom select-none"
               draggable={false}
               style={{
                 WebkitMaskImage: `url(#${fullMaskId})`,
