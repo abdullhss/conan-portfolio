@@ -7,6 +7,12 @@ import Image from "next/image";
 import overlayImg from "@/assets/abdullah overlay.png";
 import hiddenImg from "@/assets/abdullah hidden (window).png";
 
+/** Natural size of the portrait assets — scene width follows this so side gutters stay free for UI. */
+const PORTRAIT_W = overlayImg.width;
+const PORTRAIT_H = overlayImg.height;
+/** width ÷ height — used to size the box when only absolute children are inside. */
+const PORTRAIT_WH_RATIO = PORTRAIT_W / PORTRAIT_H;
+
 const MAX_TILT_DEG = 9;
 const Z_BACK = -42;
 const Z_FRONT = 52;
@@ -186,20 +192,26 @@ export function HeroSection() {
 
   return (
     <section className="box-border flex h-screen min-h-screen w-full shrink-0 flex-col items-stretch self-stretch bg-black pt-6 sm:pt-10">
-      <div
-        ref={rootRef}
-        className="relative min-h-0 flex-1 w-full max-w-none select-none overflow-hidden bg-black"
-        style={
-          {
-            touchAction: "pan-y",
-            perspective: "1400px",
-          } as CSSProperties
-        }
-        aria-label="Interactive 3D parallax portrait with irregular polygon lens — move the pointer to tilt the scene and reveal the layer below."
-      >
+      <div className="flex min-h-0 w-full flex-1 items-center justify-center gap-3 px-3 sm:px-4">
+        {/* Optional: add columns before/after the portrait (e.g. <aside className="hidden w-40 shrink-0 lg:block" />) */}
         <div
-          ref={sceneRef}
-          className="absolute inset-0 transform-3d will-change-transform"
+          ref={rootRef}
+          className="relative min-h-0 w-auto max-w-full shrink-0 select-none overflow-hidden bg-black"
+          style={
+            {
+              touchAction: "pan-y",
+              perspective: "1400px",
+              aspectRatio: `${PORTRAIT_W} / ${PORTRAIT_H}`,
+              /* Explicit width so the box isn’t height-collapsed (all scene children are absolute). */
+              width: `min(100%, calc(88svh * ${PORTRAIT_WH_RATIO}))`,
+              maxHeight: "88svh",
+            } as CSSProperties
+          }
+          aria-label="Interactive 3D parallax portrait with irregular polygon lens — move the pointer to tilt the scene and reveal the layer below."
+        >
+          <div
+            ref={sceneRef}
+            className="absolute inset-0 transform-3d will-change-transform"
           style={{
             transformOrigin: "center center",
             transform: "rotateX(0deg) rotateY(0deg)",
@@ -216,7 +228,7 @@ export function HeroSection() {
               alt=""
               fill
               priority
-              sizes="100vw"
+              sizes="(max-width: 768px) 96vw, min(90vw, 1200px)"
               className="pointer-events-none object-contain object-top select-none"
               draggable={false}
             />
@@ -232,7 +244,7 @@ export function HeroSection() {
               src={overlayImg}
               alt=""
               fill
-              sizes="100vw"
+              sizes="(max-width: 768px) 96vw, min(90vw, 1200px)"
               className="pointer-events-none object-contain object-top select-none"
               draggable={false}
               style={{
@@ -291,6 +303,7 @@ export function HeroSection() {
                 vectorEffect="non-scaling-stroke"
               />
             </svg>
+          </div>
           </div>
         </div>
       </div>
